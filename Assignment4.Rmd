@@ -1,0 +1,269 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Problem1— Using ANN for Movie Genre Classification**
+
+PREPARING TEXT
+
+1.  qdap
+
+    ```{r}
+    true_n <- read.csv("True.csv")
+    fake_n <- read.csv("Fake.csv")
+    true_n$label <- "true"
+    fake_n$label <- "fake"
+    true_n$label <- as.factor(true_n$label)
+    fake_n$label <- as.factor(fake_n$label)
+    all_news <- rbind(true_n,fake_n)
+    ```
+
+    ```{r}
+    all_news$'text&title' <- paste(all_news$title, all_news$text)
+    library(qdap)
+    all_news$'text&title' = rm_stopwords(all_news$'text&title', stopwords = tm::stopwords("english"), separate = FALSE, strip = TRUE)
+    ```
+
+2.  Randomize rows - setting seed
+
+    ```{r}
+    set.seed(1) #we didn't set seed in Assignment two for this dataset
+    r_all_news <- all_news[sample(nrow(all_news)),]
+    ```
+
+3.  Labels to 0, 1.
+
+    ```{r}
+    r_all_news$label <- ifelse(r_all_news$label == "true", 0, 1)
+    ```
+
+4.  Splitting the dataset.
+
+    ```{r}
+    n <- nrow(r_all_news)
+    tr_n <- 0.65
+    va_n <- 0.15
+    te_n <- 0.2
+
+    tr_in <- floor(tr_n * n)
+    va_in <- floor((tr_n + va_n)*n)
+
+    tr_d <- r_all_news[1:tr_in,]
+    va_d <- r_all_news[(tr_in +1):va_in,]
+    te_d <- r_all_news[(va_in + 1):n,]
+    ```
+
+5.  Layer text vectorization.
+
+    ```{r}
+    library(keras)
+    text_vectorizer <- layer_text_vectorization(output_mode = "tf_idf", ngrams = 2, max_tokens = 5000)
+    text_vectorizer%>%adapt(tr_d$`text&title`)
+
+    tr_dtm = text_vectorizer(tr_d$`text&title`)
+    va_dtm = text_vectorizer(va_d$`text&title`)
+    te_dtm = text_vectorizer(te_d$`text&title`)
+    ```
+
+TRAINING, TUNING AND EVALUATING A NEURAL NETWORK MODEL
+
+1.  ANN model with two hidden layers.
+
+    ```{r}
+    model <- keras_model_sequential() %>%
+      layer_dense(units = 64, activation = "relu", input_shape = c(dim(tr_dtm)[2])) %>%
+      layer_dense(units = 32, activation = "relu") %>%
+      layer_dense(units = 1, activation = "sigmoid")
+    ```
+
+    ```{r}
+    model %>% compile(
+      loss = "binary_crossentropy",
+      optimizer = optimizer_sgd(),
+      metrics = c("accuracy"))
+    ```
+
+    ```{r}
+    callbacks = list(callback_early_stopping(monitor = "val_loss", patience = 5, restore_best_weights = TRUE))
+    ```
+
+    ```{r}
+    history <- model %>% fit(
+      tr_dtm, tr_d$label, batch_size = 32, epochs = 20, callbacks = callbacks, validation_data = list(va_dtm, va_d$label))
+    ```
+
+    Predictions
+
+    ```{r}
+    predictions <- model%>%predict(te_dtm)
+    predict_labels <- ifelse(predictions >= 0.5, 1, 0)
+    ```
+
+    ```{r}
+    library(gmodels)
+    table(predict_labels, te_d$label)
+    ```
+
+    Interpretation,
+
+    The model is always predicting the test data input to be 1.\
+    So no further interpretation is possible properly.
+
+2.  tfruns
+
+    ```{r}
+    library(tfruns)
+
+    runs <- tuning_run("news_run.R", flags = list(
+      nodes1 = c(64, 32), 
+      nodes2 = c(32, 16), 
+      learning_rate = c(0.01, 0.05), 
+      batch_size = c(16, 32, 64),
+      optimizer = c("adam", "sgd", "rmsprop")))
+    ```
+
+    ```{r}
+    print(runs)
+    ```
+
+2-1. Highest Accuracy
+
+```{r}
+sorted_runs <- runs[order(-runs$metric_val_accuracy),]
+print(sorted_runs)
+best_run <- sorted_runs[1,]
+print(best_run)
+best_run[1,]
+```
+
+2-2. This model is not overfitting significantly because, there is no significant difference between training accuracy and validation accuracy also very minute difference between training loss and validation loss.
+
+2-3. The validation loss is minimal in the beginning, then increased, then decreased and finally increased and decreased. It stopped decreasing at epoch 8.
+
+3.  The Final Run
+
+    ```{r}
+    train_data <- as.matrix(tr_dtm)
+    val_data <- as.matrix(va_dtm)
+    ```
+
+    ```{r}
+    train_x <- rbind(train_data, val_data)
+    train_y <- c(tr_d$label, va_d$label)
+    ```
+
+    ```{r}
+    model <- keras_model_sequential() %>%
+      layer_dense(units = 64, activation = "relu", input_shape = c(dim(tr_dtm)[2])) %>%layer_dense(units = 32, activation = "relu")%>%layer_dense(units = 1, activation = "sigmoid")
+     
+    model %>% compile(
+      optimizer = optimizer_rmsprop(learning_rate = 0.01),
+      loss = 'binary_crossentropy',
+      metrics = c('accuracy')
+    )
+     
+    model %>% fit(
+      train_x, train_y,
+      epochs = 20,
+      batch_size = 32,
+    )
+    ```
+
+    ```{r}
+    model%>%evaluate(te_dtm, te_d$label)
+    ```
+
+    ```{r}
+    new_predictions <- model %>% predict(te_dtm)
+    ```
+
+    ```{r}
+    new_predict_labels <- ifelse(new_predictions >= 0.5, 1, 0)
+    ```
+
+    ```{r}
+    library(gmodels)
+    con_mat <- table(predicted = new_predict_labels,Actual = te_d$label)
+    print(con_mat)
+    ```
+
+    ```{r echo=FALSE}
+    tn <- con_mat[1,1]
+    fp <- con_mat[1,2]
+    fn <- con_mat[2,1]
+    tp <- con_mat[2,2]
+
+    pre = tp/(tp+fp)
+    rec = tp/(tp+fn)
+
+    print(paste("The Precision for this model is", round(pre, 3), "and the Recall for this model is", round(rec, 3)))
+
+    ```
+
+**Problem2—Predicting Bike Sharing Demand**
+
+1.  Exploring the dataset
+
+    ```{r}
+    bikes <- read.csv("bike.csv",header = TRUE, sep = ",")
+    str(bikes)
+    summary(bikes)
+    ```
+
+    There are 10886 observations.
+
+    | Variable   | Type        | Subtype    |
+    |------------|-------------|------------|
+    | Datetime   | Numerical   | Continuous |
+    | Season     | Categorical | Ordinal    |
+    | Holiday    | Categorical | Nominal    |
+    | Workingday | Categorical | Nominal    |
+    | Weather    | Categorical | Ordinal    |
+    | Temp       | Numerical   | Continuous |
+    | ATemp      | Numerical   | Continuous |
+    | Humidity   | Numerical   | Continuous |
+    | Windspeed  | Numerical   | Continuous |
+    | Casual     | Numerical   | Continuous |
+    | Registered | Numerical   | Continuous |
+    | Count      | Numerical   | Continuous |
+
+    ```{r}
+    colSums(is.na(bikes))
+    ```
+
+    No Missing Values.
+
+    Histogram of count.
+
+    ```{r}
+    hist(bikes$count, main = "Histogram of Bikes", xlab = "Count")
+    ```
+
+    We can see that the count of bike rental [0,50] gives a cumulative value of 3000, then it drops to 1500 and then gradually decreases, from the summary and the above histogram, we can say that count is Severly Right_Skewed.
+
+Feature Engineering
+
+2.  Removing
+
+    ```{r}
+    bikes$registered <- NULL
+    bikes$casual <- NULL
+    ```
+
+3.  Square Root
+
+    ```{r}
+    bikes$count <- sqrt(bikes$count)
+    hist(bikes$count, main = "Histogram of Bikes", xlab = "Count")
+    ```
+
+    Yes, square rooting the count variable forms almost a bell shape.
+
+4.  Datetime Conversion
+
+    ```{r}
+    date_time <- as.POSIXlt(bikes$datetime)
+    year <- date_time$year + 1900
+    month <- 
+    ```
