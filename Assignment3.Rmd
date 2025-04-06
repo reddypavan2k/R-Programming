@@ -1,0 +1,624 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+**Problem1—Predicting Income using Logistic Regression and Decision Trees**
+
+1.  Loading and Inspecting Data.
+
+    ```{r}
+    database <- read.csv("adult.data", sep = ",", na.strings = " ?", header = FALSE)
+    colnames(database) <- c("age", "workclass", "fnlwgt", "education", "edunum", "marital", "occupation", "relation", "race", "sex", "capgain", "caploss", "hrsweek", "nativity", "income")
+    ```
+
+    Structure and Summary
+
+    ```{r}
+    str(database)
+    summary(database)
+    ```
+
+    | Variable   | Type        | Sub-Type   |
+    |------------|-------------|------------|
+    | age        | Numerical   | Continuous |
+    | workclass  | Categorical | Nominal    |
+    | fnlwgt     | Numerical   | Continuous |
+    | education  | Categorical | Ordinal    |
+    | edunum     | Numerical   | Ordinal    |
+    | marital    | Categorical | Nominal    |
+    | occupation | Categorical | Nominal    |
+    | relation   | Categorical | Nominal    |
+    | race       | Categorical | Nominal    |
+    | sex        | Categorical | Binary     |
+    | cap-gain   | Numerical   | Continuous |
+    | cap-loss   | Numerical   | Continuous |
+    | hrs/week   | Numerical   | Continuous |
+    | nativity   | Categorical | Nominal    |
+    | income     | Categorical | Binary     |
+
+2.  Converting ? to NA.
+
+    while reading the data, I've used space (" ") before "?" and set those to NA.
+
+3.  Set Seed.
+
+    Split Data - Let's do this after plotting and doing tests - it can keep the process much clearer.
+
+    ```{r}
+    set.seed(69)
+    ```
+
+4.  Handling Missing Data
+
+    ```{r}
+    colSums(is.na(database))
+    ```
+
+    In the dataset Workclass, Occupation, Nativity has the missing values. Let's replace the missing values in those with "Unknown". The target variable is already imbalced and I believe perform mode imputation makes the machine biased, it's better to make data little diverse than making machine biased. So I did Missing Value Imputation, this enhances the statistical power of the analysis, improving the ability to detect patterns and test hypotheses effectively.
+
+    ```{r}
+    library(dplyr)
+
+    database <- database |>
+      mutate(
+        workclass = ifelse(is.na(workclass), "Unknown", workclass),
+        occupation = ifelse(is.na(occupation), "Unknown", occupation),
+        nativity = ifelse(is.na(nativity), "Unknown", nativity)
+      )
+    ```
+
+5.  Data in the variable "nativity" has various categories, let's find the frequency of the data.
+
+    ```{r}
+    library(tidyverse)
+    fct_count(database$nativity, sort = TRUE, prop = TRUE)
+    ```
+
+    The most occurring country in both train_data and test_data is United States. The rest of the countries occur very least. Factoring nativity based on geography is a bit complex, so let's do the factoring based on their proportion only (top 3)
+
+    ```{r}
+    library(forcats)
+    database$nativity <- fct_lump_n(database$nativity,n =3)
+    table(database$nativity)
+    ```
+
+6.  Now Let's perform some plotting and tests (I factored Categorical Variables)
+
+    ```{r echo=FALSE}
+    database$workclass <- factor(database$workclass)
+    database$education <- factor(database$education)
+    database$marital <- factor(database$marital)
+    database$occupation <- factor(database$occupation)
+    database$relation <- factor(database$relation)
+    database$race <- factor(database$race)
+    database$sex <- factor(database$sex)
+    database$nativity <- factor(database$nativity)
+    database$income <- factor(database$income)
+    ```
+
+    We know that income is a categorical variable - So we will perform
+
+    Chi Square test and Mosaic Plots on workclass, education, marital, occupation, relation, race, sex, nativity.
+
+    ```{r}
+    wo_in <- table(database$workclass,database$income)
+    ed_in <- table(database$education,database$income)
+    ma_in <- table(database$marital,database$income)
+    oc_in <- table(database$occupation,database$income)
+    re_in <- table(database$relation,database$income)
+    ra_in <- table(database$race,database$income)
+    se_in <- table(database$sex,database$income)
+    na_in <- table(database$nativity,database$income)
+    ```
+
+    WORKCLASS
+
+    ```{r echo=FALSE}
+    mosaicplot(wo_in, main = "Mosaic Plot of income by workclass", xlab = "income", ylab = "workclass", color = TRUE)
+    print(chisq.test(wo_in))
+    ```
+
+    EDUCATION
+
+    ```{r echo=FALSE}
+    mosaicplot(ed_in, main = "Mosaic Plot of income by education", xlab = "income", ylab = "education", color = TRUE)
+    print(chisq.test(ed_in))
+    ```
+
+    MARITAL
+
+    ```{r echo=FALSE}
+    mosaicplot(ma_in, main = "Mosaic Plot of income by marital", xlab = "income", ylab = "marital", color = TRUE)
+    print(chisq.test(ma_in))
+    ```
+
+    OCCUPATION
+
+    ```{r echo=FALSE}
+    mosaicplot(oc_in, main = "Mosaic Plot of income by occupation", xlab = "income", ylab = "occupation", color = TRUE)
+    print(chisq.test(oc_in))
+    ```
+
+    RELATION
+
+    ```{r echo=FALSE}
+    mosaicplot(re_in, main = "Mosaic Plot of income by relation", xlab = "income", ylab = "relation", color = TRUE)
+    print(chisq.test(re_in))
+    ```
+
+    RACE
+
+    ```{r echo=FALSE}
+    mosaicplot(ra_in, main = "Mosaic Plot of income by race", xlab = "income", ylab = "race", color = TRUE)
+    print(chisq.test(ra_in))
+    ```
+
+    SEX
+
+    ```{r echo=FALSE}
+    mosaicplot(se_in, main = "Mosaic Plot of income by sex", xlab = "income", ylab = "sex", color = TRUE)
+    print(chisq.test(se_in))
+    ```
+
+    NATIVITY
+
+    ```{r echo=FALSE}
+    mosaicplot(na_in, main = "Mosaic Plot of income by nativity", xlab = "income", ylab = "nativity", color = TRUE)
+    print(chisq.test(na_in))
+    ```
+
+    All the above categoricals gave a low p value (i.e., p \< 2.2e-16), this implies they are significantly associated with income.
+
+    Side-Side Box for all numeric variables, t-test for age, fnlwgt, cap-gain, cap-loss, hrs/week.
+
+    ANOVA on edu-num.
+
+    AGE
+
+    ```{r echo=FALSE}
+    boxplot(database$age ~ database$income, main = "Age by income", xlab = "income", ylab = "AGE")
+    tt_age <- t.test(database$age ~ database$income )
+    tt_age
+    ```
+
+    FNLWGT
+
+    ```{r echo=FALSE}
+    boxplot(database$fnlwgt ~ database$income, main = "fnlwgt by income", xlab = "income", ylab = "fnlwgt")
+    tt_fnl <- t.test(database$fnlwgt ~ database$income )
+    tt_fnl
+    ```
+
+    CAP-GAIN
+
+    ```{r echo=FALSE}
+    boxplot(database$capgain ~ database$income, main = "capital gain by income", xlab = "income", ylab = "cap-gain")
+    tt_capg <- t.test(database$capgain ~ database$income )
+    tt_capg
+    ```
+
+    CAP-LOSS
+
+    ```{r echo=FALSE}
+    boxplot(database$caploss ~ database$income, main = "capital loss by income", xlab = "income", ylab = "cap-loss")
+    tt_capl <- t.test(database$caploss ~ database$income )
+    tt_capl
+    ```
+
+    HOURS PER WEEK
+
+    ```{r echo=FALSE}
+    boxplot(database$hrsweek ~ database$income, main = "Hours per week by income", xlab = "income", ylab = "hours per week")
+    tt_hw <- t.test(database$hrsweek ~ database$income )
+    tt_hw
+    ```
+
+    EDUCATION NUMBER
+
+    ```{r echo=FALSE}
+    boxplot(database$edunum ~ database$income, main = "Education Number by income", xlab = "income", ylab = "edu num")
+    av_edn <- aov(database$edunum ~ database$income )
+    summary(av_edn)
+    ```
+
+    all the numericals are statistically sigificant to the target varible "income" except "fnlwgt".
+
+    This implies that "fnlwgt" should be removed from the dataset.
+
+    ```{r}
+    database$fnlwgt <-NULL
+    ```
+
+    Now Splitting the data.(previously mentioned in question 3).
+
+    ```{r}
+    set.seed(532)
+    train_sample <- sample((nrow(database)), floor(0.8*nrow(database)))
+    train_data <- database[train_sample,]
+    test_data <- database[-train_sample,]
+    ```
+
+7.  Logistic Regression
+
+    ```{r}
+    train_model <- glm(income ~ .,data = train_data, family = binomial(link = "logit"))
+    summary(train_model)
+    ```
+
+    ```{r}
+    predictions <- predict(train_model, test_data, type = "response")
+    head(predictions)
+    ```
+
+    ```{r}
+    predicted.label<-factor(ifelse(predictions>0.5, ">50k","<=50k"))
+    summary(predicted.label)
+    ```
+
+8.  Cross Table - Precision and Recall
+
+    ```{r}
+    actual.label<-test_data$income
+    cross_tab <- table(True = actual.label, Predicted = predicted.label)
+    cross_tab
+    ```
+
+    ```{r echo=FALSE}
+    tp_50 <- cross_tab[1,1]
+    tn_50 <- cross_tab[2,2]    
+    fp_50 <- cross_tab[2,1]   
+    fn_50 <- cross_tab[1,2]
+    ```
+
+    ```{r echo=FALSE}
+    tp_50k <- cross_tab[2,2]
+    tn_50k <- cross_tab[1,1]
+    fp_50k <- cross_tab[1,2]
+    fn_50k <- cross_tab[2,1]
+    ```
+
+    We know that
+
+    Total Error = FP + FN / (TP + TN + FP + FN)
+
+    Precision = TP/(TP+FP)
+
+    Recall = TP/(TP+FN)
+
+    For income \<= 50k
+
+    ```{r echo=FALSE}
+    te_50 <- (fp_50 + fn_50)/(tp_50 + tn_50 + fp_50 + fn_50)
+    pr_50 <- tp_50/(tp_50 + fp_50)
+    re_50 <- tp_50/(tp_50 + fn_50)
+
+    print(paste("Total Error =", te_50*100, "Precision =", (pr_50*100), "Recall =", re_50*100))
+    ```
+
+    For income \>50k
+
+    ```{r echo=FALSE}
+    te_50k <- (fp_50k + fn_50k)/(tp_50k + tn_50k + fp_50k + fn_50k)
+    pr_50k <- tp_50k/(tp_50k + fp_50k)
+    re_50k <- tp_50k/(tp_50k + fn_50k)
+
+    print(paste("Total Error =", te_50k*100, "Precision =", (pr_50k*100), "Recall =", re_50k*100))
+    ```
+
+9.  Down-Sampling data.
+
+    Checking Balance of the data.
+
+    ```{r}
+    table(train_data$income)
+    ```
+
+    There's an imbalance here. Let's handle it.
+
+    ```{r}
+    train_50 <- train_data[train_data$income == " <=50K",]
+    train_50k <- train_data[train_data$income == " >50K",]
+    ```
+
+    ```{r}
+    train_50_m <- sample_n(train_50,nrow(train_50k))
+    ```
+
+    ```{r}
+    new_train_data <-rbind(train_50_m,train_50k)
+    ```
+
+    Re-Training the Data.
+
+    ```{r}
+    train_model2 <- glm(income ~ .,data = new_train_data, family = binomial(link = "logit"))
+    summary(train_model2)
+    ```
+
+    ```{r}
+    predictions2 <- predict(train_model2, test_data, type = "response")
+    head(predictions2)
+    predicted.label2<-factor(ifelse(predictions2>0.5, ">50k","<=50k"))
+    summary(predicted.label2)
+    cross_tab2 <- table(True = actual.label, Predicted = predicted.label2)
+    cross_tab2
+    ```
+
+    ```{r echo=FALSE}
+    tp_50_2 <- cross_tab2[1,1]
+    tn_50_2 <- cross_tab2[2,2]    
+    fp_50_2 <- cross_tab2[2,1]   
+    fn_50_2 <- cross_tab2[1,2]
+    tp_50k_2 <- cross_tab2[2,2]
+    tn_50k_2 <- cross_tab2[1,1]
+    fp_50k_2 <- cross_tab2[1,2]
+    fn_50k_2 <- cross_tab2[2,1]
+    ```
+
+    For Income \<=50K
+
+    ```{r echo=FALSE}
+    te_50_2 <- (fp_50_2 + fn_50_2)/(tp_50_2 + tn_50_2 + fp_50_2 + fn_50_2)
+    pr_50_2 <- tp_50_2/(tp_50_2 + fp_50_2)
+    re_50_2 <- tp_50_2/(tp_50_2 + fn_50_2)
+
+    print(paste("Total Error =", te_50_2*100, "Precision =", (pr_50_2*100), "Recall =", re_50_2*100))
+    ```
+
+    Total Error, Precision has Increased and Recall(\<=50) has Decreased when compared with full training data.
+
+    For Income \>50K
+
+    ```{r echo=FALSE}
+    te_50k_2 <- (fp_50k_2 + fn_50k_2)/(tp_50k_2 + tn_50k_2 + fp_50k_2 + fn_50k_2)
+    pr_50k_2 <- tp_50k_2/(tp_50k_2 + fp_50k_2)
+    re_50k_2 <- tp_50k_2/(tp_50k_2 + fn_50k_2)
+
+    print(paste("Total Error =", te_50k_2*100, "Precision =", (pr_50k_2*100), "Recall =", re_50k_2*100))
+    ```
+
+    Total Error, Recall has increased and Precision (\>50K)has decreased when compared with Full train data.
+
+10. C5.0 Decision Tree Model.
+
+    ```{r}
+    library(C50)
+    adult_model <- C5.0(train_data[-14], train_data$income, trials = 30)
+    adult_model
+    summary(adult_model)
+    ```
+
+    ```{r}
+    adult_pred <- predict(adult_model, test_data)
+    library(gmodels)
+    CrossTable(test_data$income, adult_pred, prop.chisq = FALSE, prop.r = FALSE, prop.c = FALSE, dnn = c('actual income', 'predicted income'))
+    ```
+
+    ```{r echo=FALSE}
+    adult_ctab <- table(True = actual.label, Predicted = adult_pred)
+    adult_ctab
+
+    tp_50c <- adult_ctab[1,1]
+    tn_50c <- adult_ctab[2,2]    
+    fp_50c <- adult_ctab[2,1]   
+    fn_50c <- adult_ctab[1,2]
+    tp_50kc <- adult_ctab[2,2]
+    tn_50kc <- adult_ctab[1,1]
+    fp_50kc <- adult_ctab[1,2]
+    fn_50kc <- adult_ctab[2,1]
+    ```
+
+    For income \<=50K
+
+    ```{r echo=FALSE}
+    te_50c <- (fp_50c + fn_50c)/(tp_50c + tn_50c + fp_50c + fn_50c)
+    pr_50c <- tp_50c/(tp_50c + fp_50c)
+    re_50c <- tp_50c/(tp_50c + fn_50c)
+
+    print(paste("Total Error =", te_50c*100, "Precision =", (pr_50c*100), "Recall =", re_50c*100))
+    ```
+
+    For income \>50K
+
+    ```{r echo=FALSE}
+    te_50kc <- (fp_50kc + fn_50kc)/(tp_50kc + tn_50kc + fp_50kc + fn_50kc)
+    pr_50kc <- tp_50kc/(tp_50kc + fp_50kc)
+    re_50kc <- tp_50kc/(tp_50kc + fn_50kc)
+
+    print(paste("Total Error =", te_50kc*100, "Precision =", (pr_50kc*100), "Recall =", re_50kc*100))
+    ```
+
+    Comparing to Logistic Regression, C5.0 Decision tree performs better.
+
+    Total Error is little lesser, Precision and Recall are a bit higher.
+
+    Now C5.0 for downsized sample.
+
+    ```{r}
+    adult_model2 <- C5.0(new_train_data[-14], new_train_data$income, trials = 30)
+    adult_model2
+    summary(adult_model2)
+    ```
+
+    ```{r}
+    adult_pred2 <- predict(adult_model2, test_data)
+    library(gmodels)
+    CrossTable(test_data$income, adult_pred2, prop.chisq = FALSE, prop.r = FALSE, prop.c = FALSE, dnn = c('actual income', 'predicted income'))
+    ```
+
+    ```{r echo=FALSE}
+    adult_ctab2 <- table(True = actual.label, Predicted = adult_pred2)
+    adult_ctab2
+
+    tp_50c2 <- adult_ctab[1,1]
+    tn_50c2 <- adult_ctab[2,2]    
+    fp_50c2 <- adult_ctab[2,1]   
+    fn_50c2 <- adult_ctab[1,2]
+    tp_50kc2 <- adult_ctab[2,2]
+    tn_50kc2 <- adult_ctab[1,1]
+    fp_50kc2 <- adult_ctab[1,2]
+    fn_50kc2 <- adult_ctab[2,1]
+    ```
+
+    For Income \<=50K
+
+    ```{r echo=FALSE}
+    te_50c2 <- (fp_50c2 + fn_50c2)/(tp_50c2 + tn_50c2 + fp_50c2 + fn_50c2)
+    pr_50c2 <- tp_50c2/(tp_50c2 + fp_50c2)
+    re_50c2 <- tp_50c2/(tp_50c2 + fn_50c2)
+
+    print(paste("Total Error =", te_50c2*100, "Precision =", (pr_50c2*100), "Recall =", re_50c2*100))
+    ```
+
+    For Income \>50K
+
+    ```{r echo=FALSE}
+    te_50kc2 <- (fp_50kc2 + fn_50kc2)/(tp_50kc2 + tn_50kc2 + fp_50kc2 + fn_50kc2)
+    pr_50kc2 <- tp_50kc2/(tp_50kc2 + fp_50kc2)
+    re_50kc2 <- tp_50kc2/(tp_50kc2 + fn_50kc2)
+
+    print(paste("Total Error =", te_50kc2*100, "Precision =", (pr_50kc2*100), "Recall =", re_50kc2*100))
+    ```
+
+    When compared the outputs of Logistic Regression and C5.0 Decision Tree Model, C5.0 performs better. i.e.., less error, higher precision and recall.
+
+    **Problem2—Predicting Student Performance**
+
+11. Read the dataset into a dataframe.
+
+    ```{r}
+    student <- read.csv2("student-mat.csv", sep=";", header = TRUE)
+    str(student)
+    summary(student)
+    ```
+
+12. Exploring the dataset.
+
+    a\. Missing Values ?
+
+    ```{r}
+    colSums(is.na(student))
+    ```
+
+    There are no Missing Values.
+
+    b\. Checking association.(Factoring is done in behind).
+
+    ```{r echo = FALSE}
+    student$school <- factor(student$school)
+    student$sex <- factor(student$sex)
+    student$address <- factor(student$address)
+    student$famsize <- factor(student$famsize)
+    student$Pstatus <- factor(student$Pstatus)
+    student$Mjob <- factor(student$Mjob)
+    student$Fjob <- factor(student$Fjob)
+    student$reason <- factor(student$reason)
+    student$guardian <- factor(student$guardian)
+    student$schoolsup <- factor(student$schoolsup)
+    student$famsup <- factor(student$famsup)
+    student$paid <- factor(student$paid)
+    student$activities <- factor(student$activities)
+    student$nursery <- factor(student$nursery)
+    student$higher <- factor(student$higher)
+    student$internet <- factor(student$internet)
+    student$romantic <- factor(student$romantic)
+    ```
+
+    Plotting and Testing (in loop)
+
+    ```{r}
+    factors <- colnames(student[-33])
+
+    for (i in factors) {
+      print(i)
+      
+      with(student, {
+        if (is.factor(get(i))) {
+          if (length(levels(get(i))) <= 2) {
+            boxplot(G3 ~ get(i), main = paste("G3 by", i), xlab = i, ylab = "G3")
+            print(t.test(G3 ~ get(i)))
+          } else {
+            boxplot(G3 ~ get(i), main = paste("G3 by", i), xlab = i, ylab = "G3")
+            aov_result <- aov(G3 ~ get(i))
+            print(summary(aov_result))
+          }
+        } else if (i %in% c("Fedu", "Medu")) {
+          plot(G3 ~ get(i),main = paste("G3 by", i), xlab = i, ylab = "G3")
+          sp_cor <- cor(G3, get(i), method = "spearman")
+          print(paste("Spearman-Cor-Coefficient:", sp_cor))
+        } else {
+          plot(G3 ~ get(i),main = paste("G3 by", i), xlab = i, ylab = "G3")
+          pr_cor <- cor(G3, get(i), method = "pearson")
+          print(paste("Pearson-Cor-Coefficient:", pr_cor))
+        }
+      })
+    }
+    ```
+
+    Keeping the Signifance level(0.05), from the above results we can say that - sex, address, Mjob, failures, schoolsup, paid, higher, internet, romantic, G1, G2 are associated with target variable G3.
+
+    c\. Histogram of G3
+
+    ```{r}
+    hist(student$G3, main = "Histogram of G3", xlab = "G3", ylab = "Frequency")
+    ```
+
+    We can see that most students have score in the range [8,12] and I believe average(mean) is in this range, the count of people who have low score is greater than the count of people who have high score.
+
+13. Splitting the data.
+
+    ```{r}
+    student_sample <- sample((nrow(student)), floor(0.8*nrow(student)))
+    student_train <- student[student_sample,]
+    student_test <- student[-student_sample,]
+    ```
+
+14. Random Seed
+
+    ```{r}
+    set.seed(123)
+    ```
+
+15. 10 fold cross validation using linear regression
+
+    ```{r}
+    library(caret)
+    train.control = trainControl(method = "cv", number = 10)
+    stumodel<- train(G3 ~ ., data = student_train, method = "lm", trControl = train.control)
+    print(stumodel)
+    summary(stumodel)
+    ```
+
+    The coefficients that are statistically different from zero are famrel, Walc, absences, G1 and G2. This means that Score in G3 somehow depend on them.
+
+    10 fold cross validation using step wise linear regression method with backward selection.
+
+    ```{r}
+    library(leaps)
+    final.model <- train(G3 ~., data = student_train, method = "leapBackward", trControl = train.control, tuneGrid = data.frame(nvmax=1:32))
+    print(final.model)
+    ```
+
+    I took nvmax = 32 as there are 32 variables.
+
+    ```{r}
+    summary(final.model)
+    ```
+
+16. 10 fold cross validation using step wise linear regression method with backward selection gives lowest RSME.
+
+    Predictions
+
+    ```{r}
+    pred <- predict(final.model, student_test)
+    summary(student_test$G3)
+    summary(pred)
+    sqrt(mean((student_test$G3 - pred)^2))
+    ```
+
+    The first summary is of Actual test data and latter is of Predicted data. We can see that Model perform well from Minimum to Maximum.
+
+Thank you.
