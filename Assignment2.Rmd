@@ -1,0 +1,528 @@
+---
+title: "Assignment 2 FA-24"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+**Problem 1: Applying k-Nearest Neighbors to predict the success of a marketing campaign**
+
+DATA EXPLORATION
+
+1.  bank is the Data set
+
+    ```{r}
+    bank<- read.csv("bank-full.csv", sep = ";", na.strings = "unknown", header = TRUE) 
+    ```
+
+2.  Structure and Summary
+
+    ```{r}
+    str(bank)
+    summary(bank)
+    ```
+
+    | Variable  | Type        | Sub-Type   |
+    |-----------|-------------|------------|
+    | age       | numeric     | continuous |
+    | job       | categorical | nominal    |
+    | marital   | categorical | nominal    |
+    | education | categorical | ordinal    |
+    | default   | categorical | Binary     |
+    | balance   | numeric     | continuous |
+    | housing   | categorical | Binary     |
+    | loan      | categorical | Binary     |
+    | contact   | categorical | nominal    |
+    | day       | numeric     | discrete   |
+    | month     | categorical | nominal    |
+    | duration  | numeric     | continuous |
+    | campaign  | numeric     | discrete   |
+    | pdays     | numeric     | continuous |
+    | previous  | numeric     | discrete   |
+    | poutcome  | categorical | nominal    |
+    | y         | categorical | Binary     |
+
+3.  Find frequency of y.
+
+    ```{r}
+    dfy<- data.frame(bank$y)
+    freq_y <- table(dfy)
+    print(prop.table(freq_y))
+    ```
+
+    From the above results we can see that y is not balanced, 'no' is 88.3% and 'yes' is 11.69%.
+
+    ```{r echo = FALSE}
+    bank$job <- factor(bank$job)
+    bank$marital <- factor(bank$marital)
+    bank$education <- factor(bank$education)
+    bank$default <- factor(bank$default)
+    bank$housing <- factor(bank$housing)
+    bank$loan <- factor(bank$loan)
+    bank$contact <- factor(bank$contact)
+    bank$month <- factor(bank$month, levels = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))
+    bank$poutcome <- factor(bank$poutcome)
+    bank$y <- factor(bank$y)
+
+    ```
+
+4.  Exploring data. (I factored Categorical Variables)
+
+    We know that variable y is a categorical, we'll perform chi square test and do mosaic plots on job, marital, education, default, housing, loan, contact, month, poutcome.
+
+    ```{r echo = FALSE}
+    jo_y <- table(bank$job,bank$y)
+    ma_y <- table(bank$marital,bank$y)
+    ed_y <- table(bank$education,bank$y)
+    de_y <- table(bank$default,bank$y)
+    ho_y <- table(bank$loan,bank$y)
+    lo_y <- table(bank$loan,bank$y)
+    co_y <- table(bank$contact,bank$y)
+    mo_y <- table(bank$month,bank$y)
+    po_y <- table(bank$poutcome,bank$y)
+    ```
+
+    We'll perform t-test and side -by-side box plot on age, balance, day, duration, campaign, pdays, previous.
+
+    JOB
+
+    ```{r echo = FALSE}
+    mosaicplot(jo_y, main = "Mosaic Plot of y by job", xlab = "y", ylab = "job", color = TRUE)
+    print(chisq.test(jo_y))
+    ```
+
+    MARITAL
+
+    ```{r echo = FALSE}
+    mosaicplot(ma_y, main = "Mosaic Plot of y by maritalL", xlab = "y", ylab = "marital", color = TRUE)
+    print(chisq.test(ma_y))
+    ```
+
+    EDUCATION
+
+    ```{r echo = FALSE}
+    mosaicplot(ed_y, main = "Mosaic Plot of y by education", xlab = "y", ylab = "education", color = TRUE)
+    print(chisq.test(ed_y))
+    ```
+
+    DEFAULT
+
+    ```{r echo = FALSE}
+    mosaicplot(de_y, main = "Mosaic Plot of y by default", xlab = "y", ylab = "default", color = TRUE)
+    print(chisq.test(de_y))
+    ```
+
+    HOUSING
+
+    ```{r echo = FALSE}
+    mosaicplot(ho_y, main = "Mosaic Plot of y by housing", xlab = "y", ylab = "housing", color = TRUE)
+    print(chisq.test(ho_y))
+    ```
+
+    LOAN
+
+    ```{r echo = FALSE}
+    mosaicplot(lo_y, main = "Mosaic Plot of y by loan", xlab = "y", ylab = "loan", color = TRUE)
+    print(chisq.test(lo_y))
+
+    ```
+
+    CONTACT
+
+    ```{r echo = FALSE}
+    mosaicplot(co_y, main = "Mosaic Plot of y by contact", xlab = "y", ylab = "contact", color = TRUE)
+    print(chisq.test(co_y))
+    ```
+
+    MONTH
+
+    ```{r echo = FALSE}
+    mosaicplot(mo_y, main = "Mosaic Plot of y by month", xlab = "y", ylab = "month", color = TRUE)
+    print(chisq.test(mo_y))
+    ```
+
+    POUTCOME
+
+    ```{r echo = FALSE}
+    mosaicplot(po_y, main = "Mosaic Plot of y by poutcome", xlab = "y", ylab = "poutcome", color = TRUE)
+    print(chisq.test(po_y))
+    ```
+
+    All the above categorical variables are significantly associated with the variable y(target), as the p value is very low i.e., p-value \< 2.2e-16.
+
+    Now Coming to the Numericals,
+
+    AGE
+
+    ```{r echo = FALSE}
+    boxplot(bank$age ~ bank$y, main = "Age by y", xlab = "y", ylab = "AGE")
+    tt_age <- t.test(bank$age ~ bank$y )
+    tt_age
+    ```
+
+    BALANCE
+
+    ```{r echo = FALSE}
+    boxplot(bank$balance ~ bank$y, main = "Balance by y", xlab = "y", ylab = "Balance")
+    tt_age <- t.test(bank$balance ~ bank$y )
+    tt_age
+    ```
+
+    DAY
+
+    ```{r echo = FALSE}
+    bank$month_num <- match(bank$month, c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))
+
+    bank$day_of_year <- as.Date(paste(bank$month_num, bank$day, sep = "-"), format = "%m-%d") - as.Date("01-01", format = "%m-%d")
+
+    bank$day_of_year <- as.numeric(bank$day_of_year) + 1
+
+    boxplot(bank$day_of_year ~ bank$y, main = "DOY by y", xlab = "y", ylab = "DOY")
+    tt_age <- t.test(bank$day_of_year ~ bank$y )
+    tt_age
+    ```
+
+    DURATION
+
+    ```{r echo = FALSE}
+    boxplot(bank$duration ~ bank$y, main = "Duration by y", xlab = "y", ylab = "duration")
+    tt_age <- t.test(bank$duration ~ bank$y )
+    tt_age
+
+    ```
+
+    CAMPAIGN
+
+    ```{r echo = FALSE}
+    boxplot(bank$campaign ~ bank$y, main = "campaign by y", xlab = "y", ylab = "campaign")
+    tt_age <- t.test(bank$campaign ~ bank$y )
+    tt_age
+    ```
+
+    PDAYS
+
+    ```{r echo = FALSE}
+    boxplot(bank$pdays ~ bank$y, main = "pdays by y", xlab = "y", ylab = "pdays")
+    tt_age <- t.test(bank$pdays ~ bank$y )
+    tt_age
+    ```
+
+    PREVIOUS
+
+    ```{r echo = FALSE}
+    boxplot(bank$previous ~ bank$y, main = "previous by y", xlab = "y", ylab = "previous")
+    tt_age <- t.test(bank$previous ~ bank$y )
+    tt_age
+    ```
+
+    All the above numericals are either highly significant or statistically Significant, this means that all these variables are associated to variable y.
+
+DATA PREPARATION
+
+5.  for unknown variables.
+
+    ```{r}
+    colSums(is.na(bank))
+    ```
+
+    The variables that have missing values are i) job - 208, ii) education - 1857, iii) contact - 13020, iv) poutcome - 36959
+
+6.  In the dataset has no numerical variable is missing it's value, I've added four variable for MVI and then converted NA values to "unknown".
+
+    ```{r}
+    na_var <- c("job", "education", "contact", "poutcome")
+    for(val in na_var){
+      mvi_colname<- paste0(val, "_mvi")
+      bank[[mvi_colname]]<-as.integer(is.na(bank[[val]]))
+    }
+    for (val in na_var) {
+      bank[[val]] <- as.character(bank[[val]])
+      bank[[val]][is.na(bank[[val]])] <- "unknown"
+    }
+    ```
+
+7.  NA Value check
+
+    ```{r}
+    colSums(is.na(bank))
+    ```
+
+8.  Setting seed
+
+    ```{r}
+    set.seed(1)
+    ```
+
+9.  Randomizing dataframe
+
+    ```{r}
+    randomized_table <- bank[sample(nrow(bank)),]
+    ```
+
+10. One Hot Encoding { installing and loading mltools in behind}
+
+    ```{r echo = FALSE}
+    library(data.table)
+    library(mltools)
+    library(dplyr)
+    ```
+
+    ```{r echo=FALSE}
+    randomized_table$job <- factor(randomized_table$job)
+    randomized_table$education <- factor(randomized_table$education)
+    randomized_table$contact <- factor(randomized_table$contact)
+    randomized_table$poutcome <- factor(randomized_table$poutcome)
+    ```
+
+    ```{r}
+    rbank_dt <- as.data.table(randomized_table)
+    rbank_dt_encode <- one_hot(rbank_dt, cols = c("job", "marital", "education", "default", "housing", "loan", "contact", "month","poutcome"))
+    rbank_dt_encode <- select(rbank_dt_encode,-c("day", "month_num"))
+    head(rbank_dt_encode)
+    ```
+
+11. Splitting the data.
+
+    As we are using "randomized_table" as dataset, let's continue with the same.
+
+    ```{r}
+    train_set <- rbank_dt_encode[1:36168,]
+    test_set <- rbank_dt_encode[36169:nrow(randomized_table),]
+    ```
+
+    After this the data set is split into two, i.e., train_set with 36168 entries and test_set with 9043 entries.
+
+12. 5-fold cross validation with kNN (trying to perform as mentioned in lecture pdf)
+
+    ```{r}
+    library(caret)
+    library(class)
+    train_ny <- select(train_set, -c("y")) 
+    train_y <- as.vector(pull(train_set, "y"))
+    test_ny <- select(test_set, -c("y"))
+    test_y <- as.vector(pull(test_set, "y"))
+
+    crossValidationError <- function(features, labels, kneighbors) {
+      folds <- createFolds(labels, k = 5)
+      errors <- sapply(folds, function(fold_in) { 
+        knn_fold(features, labels, fold_in, kneighbors)
+      })
+      return(mean(errors))
+    }
+    knn_fold <- function(train_ny, train_y, fold_in, kneighbors) {
+      train <- train_ny[-fold_in,]
+      test <- train_ny[fold_in,]
+      
+      train_labels <- train_y[-fold_in]
+      test_labels <- train_y[fold_in]
+      
+      preds <- knn(train = train, test = test, cl = train_labels, k = kneighbors)
+      
+      t <- table(test_labels, preds)
+     
+      error <- (t[1, 2] + t[2, 1]) / sum(t)
+      return(error)
+    }
+    mean_error <- crossValidationError(features = train_ny, labels = train_y, kneighbors = 5)
+    print(paste("Accuracy =", 1 - mean_error))
+    ```
+
+13. Tune K
+
+    k values range (1, 5, 10, 20, 50, 100, sqrt(n)), here n value is 36168.
+
+    ```{r}
+    ks = c(1, 5, 10, 20, 50, 100, sqrt(nrow(train_ny)))
+    errors <- sapply(ks, crossValidationError, features = train_ny, labels = train_y )
+    accuracies <- 1 - errors
+    print(paste("Cross-Valid Accuracies =")) 
+    accuracies
+    ```
+
+    Plotting K vs Cross-Valid Accuracies
+
+    ```{r}
+    plot(accuracies~ks, main = "K vs Cross-Valid Accuracies", xlab = "k", ylab = "CV Accuracies")
+    lines(accuracies~ks)
+    ```
+
+    For the given k values, k = 50 is best value.
+
+14. knn with best k value (50).
+
+    ```{r}
+    prediction <- knn(train = train_ny, test = test_ny, cl = train_y, k = 50)
+    str(prediction)
+    ```
+
+15. Cross table of prediction and test target.
+
+    ```{r}
+    library(gmodels)
+    CrossTable(x = test_y, y = prediction, prop.chisq=FALSE)
+    ```
+
+16. FPR - FNR
+
+    FPR = FP/(TN + FP)
+
+    FNR = FN/(TP + FN)
+
+    ```{r echo = FALSE}
+    crosstab <- table(test_y, prediction)
+
+    tn = crosstab[1, 1]
+    fp = crosstab[1, 2]
+    fn = crosstab[2, 1]
+    tp = crosstab[2, 2]
+
+    print(paste("TN:", tn, "FP:", fp, "FN:", fn, "TP:", tp))
+
+    fpr = fp/(tn+fp)
+    print(paste("False Positive Rate =", fpr))
+
+    fnr = fn/(tp+fn)
+    print(paste("False Negative Rate =", fnr))
+    ```
+
+17. Majority Classifier, when we consider this and as the dataset is imbalanced, it will predict y = "no" for all observations, the accuracy would be greater than 85% and less than 90%.
+
+    I guess KNN might do a little better than majority classifier, with the best k value.
+
+18. As we already discussed FPR, FNR for KNN in an above question, now for Majority Classifier,
+
+    As it will never predict y="yes", there are no false positives, FPR will be 0.
+
+    As it will always predict y= "no", it will incorrectly predict all positives as negatives, FNR will be 1.
+
+    This means that majority classifier doesn't misclassify any "no" instances but fails completely on prediciting the "yes" class and vice-versa.
+
+    Therefore, the KNN classifier is more effective than the majority classifier, especially in balancing between false positives and false negatives.
+
+**Problem 2: Applying Naïve Bayes to detect fake news**
+
+1.  Combining two datasets.
+
+    ```{r}
+    true_n <- read.csv("True.csv")
+    fake_n <- read.csv("Fake.csv")
+    true_n$label <- "true"
+    fake_n$label <- "fake"
+    true_n$label <- as.factor(true_n$label)
+    fake_n$label <- as.factor(fake_n$label)
+    all_news <- rbind(true_n,fake_n)
+    ```
+
+    ```{r}
+    str(all_news)
+    table(all_news$label)
+    ```
+
+2.  Concatenate "title" & "text"
+
+    ```{r}
+    all_news$'text&title' <- paste(all_news$title, all_news$text)
+    ```
+
+3.  Randomize the dataset.
+
+    ```{r}
+    r_all_news <- all_news[sample(nrow(all_news)),]
+    train_index <- 0.8*nrow(r_all_news)
+    train_row <- nrow(r_all_news)
+    news_train_labels <- r_all_news[1:train_index,]$label
+    news_test_labels <- r_all_news[(train_index+1):train_row,]$label
+    ```
+
+4.  Text Corpus
+
+    ```{r}
+    library(tm)
+    library(textstem)
+    library(dplyr)
+
+    r_all_news$`text&title` <- as.character(r_all_news$`text&title`)
+    corpus <- VCorpus(VectorSource(r_all_news$`text&title`))
+
+    preprocess_text <- function(corpus) {
+      corpus <- tm_map(corpus, content_transformer(tolower))
+      corpus <- tm_map(corpus, removePunctuation)             
+      corpus <- tm_map(corpus, removeWords, stopwords("en"))  
+      corpus <- tm_map(corpus, stripWhitespace)                
+      corpus <- tm_map(corpus, stemDocument)
+      return(corpus)
+    }
+    clean_corpus <- preprocess_text(corpus)
+    ```
+
+5.  Word Cloud - Tag Cloud
+
+    ```{r}
+    #seperating fake and true news for understanding wordCloud differences.
+    fake_n <- fake_n[sample(nrow(fake_n)),]
+    true_n <- true_n[sample(nrow(true_n)),]
+    fake_corpus <- VCorpus(VectorSource(fake_n$text))
+    true_corpus <- VCorpus(VectorSource(true_n$text))
+    clean_true_corpus <- preprocess_text(true_corpus)
+    clean_fake_corpus <- preprocess_text(fake_corpus)
+    ```
+
+    ```{r}
+    wordcloud(clean_true_corpus, min.freq = 50, random.order = FALSE, max.words = 200)
+    wordcloud(clean_fake_corpus, min.freq = 50, random.order = FALSE, max.words = 200)
+    ```
+
+    The visible difference true word cloud and fake word cloud is,
+
+    true word has more of "said", "trump", "state", "reuter" in decreasing order and fake word has more of "trump", "said", "will" , "state".
+
+6.  Document Term Matrix and Splitting Data.
+
+    ```{r}
+    news_dtm <- DocumentTermMatrix(clean_corpus)
+    train_n_data <- news_dtm[1:train_index,]
+    test_n_data <- news_dtm[(train_index+1):train_row,]
+    ```
+
+7.  Removing Freq words and Frequencies to "Yes", "No"
+
+    ```{r}
+    news_freq_words <- findFreqTerms(train_n_data, 100)
+    news_train_af <- train_n_data[,news_freq_words]
+    news_test_af <- test_n_data[,news_freq_words]
+
+    convert_counts <- function(x){
+      x <- ifelse(x>0, "Yes", "No")
+    }
+
+    news_train <- apply (news_train_af, MARGIN = 2, convert_counts)
+    news_test <- apply(news_test_af, MARGIN = 2, convert_counts)
+    ```
+
+8.  Train a Naïve Bayes classifier.
+
+    ```{r}
+    library(e1071)
+    library(gmodels)
+    news_classifier <- naiveBayes(news_train, news_train_labels)
+    news_test_pred <- predict(news_classifier, news_test)
+
+    CrossTable(news_test_pred, news_test_labels, prop.chisq = FALSE, prop.t = FALSE, dnn = c('predicted', 'actual'))
+    ```
+
+    ```{r}
+    crosstab_ii <- table(news_test_pred, news_test_labels)
+    truen = crosstab_ii[2, 2]
+    falsep = crosstab_ii[1, 2]
+    falsen = crosstab_ii[2, 1]
+    truep = crosstab_ii[1, 1]
+
+    acc_news = (truep+truen)/(truep+truen+falsen+falsep)
+    prec_news = truep/(truep+falsep)
+    rec_news = truep/(truep+falsen)
+
+    print(paste("Accuracy =", acc_news*100, "Precision =", (prec_news*100), "Recall =", rec_news*100))
+    ```
+
+    Thus we trained a Naive Bayes Classifier and we got above results.
