@@ -1,0 +1,1034 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Loading Required Libraries
+
+```{r}
+library(glmnet)
+library(mltools)
+library(data.table)
+library(randomForest)
+library(tfruns)
+library(tidyr)
+library(scales)
+library(psych)
+library(dplyr)
+library(caret)
+library(ggplot2)
+```
+
+Loading Dataset as Dataset_NIJ
+
+```{r}
+Dataset_NIJ <- read.csv("NIJ_s_Recidivism_Challenge_Full_Dataset_20240402.csv",na.strings = "")
+```
+
+Removing first column
+```{r}
+Dataset_NIJ <- Dataset_NIJ[, -1]
+head(Dataset_NIJ)
+```
+Removing the variables 
+```{r}
+Dataset_NIJ$Recidivism_Arrest_Year1 <- NULL
+Dataset_NIJ$Recidivism_Arrest_Year2 <- NULL
+Dataset_NIJ$Recidivism_Arrest_Year3 <- NULL
+
+```
+
+```{r}
+str(Dataset_NIJ)
+summary(Dataset_NIJ) 
+```
+There are 22 numerical and 28 categorical columns in dataset
+
+1.missing values
+
+```{r}
+Missing_columns <- colnames(Dataset_NIJ)[colSums(is.na(Dataset_NIJ)) > 0]
+Missing_columns
+```
+
+```{r}
+num_columns <- ncol(Dataset_NIJ)
+missing_col_names <- length(Missing_columns)
+```
+
+```{r}
+na_percentage = missing_col_names/num_columns * 100
+na_percentage
+```
+22 % of total columns have missing values 
+
+```{r}
+#this will give the percentage by column
+naCount<-colSums(is.na(Dataset_NIJ))
+naPercentage<-(naCount/nrow(Dataset_NIJ))*100
+naPercentage
+```
+
+2.  Read the data description carefully. Based on data description, convert categorical variables to factors.
+
+```{r}
+Dataset_NIJ <- Dataset_NIJ %>%
+  mutate(across(
+    c(
+      "Gender","Race","Age_at_Release","Gang_Affiliated","Supervision_Level_First","Education_Level","Prison_Offense","Prior_Arrest_Episodes_DVCharges","Prior_Arrest_Episodes_GunCharges","Prior_Conviction_Episodes_Viol","Prior_Conviction_Episodes_PPViolationCharges","Prior_Conviction_Episodes_DomesticViolenceCharges","Prior_Conviction_Episodes_GunCharges","Prior_Revocations_Parole","Prior_Revocations_Probation","Condition_MH_SA","Condition_Cog_Ed","Condition_Other","Violations_ElectronicMonitoring","Violations_Instruction","Employment_Exempt","Recidivism_Within_3years","Violations_FailToReport","Violations_MoveWithoutPermission","Prison_Years"
+    ), 
+    as.factor
+  ))
+str(Dataset_NIJ)
+
+
+```
+
+3.  Converting “10 or more” kind of values to 10
+
+```{r}
+library(dplyr)
+library(stringr)
+
+Dataset_NIJ <- Dataset_NIJ %>%
+  mutate(
+    across(
+      c(
+        "Prior_Arrest_Episodes_Felony", "Dependents", "Prior_Arrest_Episodes_Misd", 
+        "Prior_Arrest_Episodes_Violent", "Prior_Arrest_Episodes_Property", 
+        "Prior_Arrest_Episodes_Drug", "Prior_Arrest_Episodes_PPViolationCharges", 
+        "Prior_Conviction_Episodes_Felony", "Prior_Conviction_Episodes_Misd", 
+        "Prior_Conviction_Episodes_Prop", "Prior_Conviction_Episodes_Drug", 
+        "Delinquency_Reports", "Program_Attendances", "Program_UnexcusedAbsences", 
+        "Residence_Changes"
+      ),
+      # For each column, we use str_extract to get the numeric part
+      ~ as.numeric(str_extract(., "\\d+")) 
+    )
+  )
+
+```
+
+4.  statistical tests and plots
+
+```{r}
+
+# List of categorical variables to test against 'Recidivism_Within_3years'
+categorical_vars <- c(
+  "Gender", "Race", "Age_at_Release", "Gang_Affiliated", 
+  "Supervision_Level_First", "Education_Level", "Dependents", 
+  "Prison_Offense", "Prison_Years", "Prior_Arrest_Episodes_Felony", 
+  "Prior_Arrest_Episodes_Misd", "Prior_Arrest_Episodes_Violent", 
+  "Prior_Arrest_Episodes_Property", "Prior_Arrest_Episodes_Drug", 
+  "Prior_Arrest_Episodes_PPViolationCharges", "Prior_Arrest_Episodes_DVCharges", 
+  "Prior_Arrest_Episodes_GunCharges", "Prior_Conviction_Episodes_Felony", 
+  "Prior_Conviction_Episodes_Misd", "Prior_Conviction_Episodes_Viol", 
+  "Prior_Conviction_Episodes_Prop", "Prior_Conviction_Episodes_Drug", 
+  "Prior_Conviction_Episodes_PPViolationCharges", 
+  "Prior_Conviction_Episodes_DomesticViolenceCharges", 
+  "Prior_Conviction_Episodes_GunCharges", "Prior_Revocations_Parole", 
+  "Prior_Revocations_Probation", "Condition_MH_SA", "Condition_Cog_Ed", 
+  "Condition_Other", "Violations_ElectronicMonitoring", 
+  "Violations_Instruction", "Violations_FailToReport", 
+  "Violations_MoveWithoutPermission", "Delinquency_Reports", 
+  "Program_Attendances", "Program_UnexcusedAbsences", 
+  "Residence_Changes", "Employment_Exempt", 
+  "Recidivism_Within_3years", "Training_Sample"
+)
+```
+
+```{r}
+#this gives the index of target variable
+recidivismIndices <- which(names(Dataset_NIJ) == 'Recidivism_Within_3years')
+
+results <- lapply(categorical_vars, function(var) {
+  # This will check the type of column if its factor perform chisq and mosaic plot
+  if (is.factor(Dataset_NIJ[[var]])) {
+    
+      pval <- chisq.test(Dataset_NIJ$Recidivism_Within_3years, Dataset_NIJ[[var]])
+    
+      mosaicplot(Dataset_NIJ$Recidivism_Within_3years ~ Dataset_NIJ[[var]], 
+                 shade = TRUE, 
+                 main = paste("Recidivism Within 3 years vs", var), 
+                 xlab = "Recidivism Within 3 years", ylab = var)
+      cat("p.value of ", var, "and Recidivism Within 3years:", pval$p.value, "\n")
+    
+  } 
+  else if (is.numeric(Dataset_NIJ[[var]])) {
+    
+      pval <- oneway.test(Dataset_NIJ[[var]] ~ Dataset_NIJ$Recidivism_Within_3years)
+      # This creates a boxplot to visualize 
+      boxplot(Dataset_NIJ[[var]] ~ Dataset_NIJ$Recidivism_Within_3years,
+              main = paste("Recidivism Within 3 years vs", var),
+              xlab = "Recidivism Within 3 years", ylab = var)
+      cat("p.value of ", var, "and Recidivism Within 3years:", pval$p.value, "\n")
+   
+  }
+})
+#extracting p_values for all plots
+p_values <- sapply(results, function(res) if (!is.null(res)) res$p.value)
+
+```
+
+5.  Do NOT remove any variable yet
+
+6.  Split the data to train and test set based on this variable
+
+```{r}
+# Split the dataset into training and testing sets based on Training_Sample
+training_Data <- Dataset_NIJ %>% filter(Training_Sample == 1) %>% select(-Training_Sample)
+testing_Data <- Dataset_NIJ %>% filter(Training_Sample == 0) %>% select(-Training_Sample)
+
+# Check the sizes of the splits
+cat("Training set size:", nrow(training_Data), "\n")
+cat("Test set size:", nrow(testing_Data), "\n")
+
+
+```
+
+7 Dealing with missing values
+
+```{r}
+Missing_columns
+```
+
+```{r}
+# This following Code is Written With help of AI <How to impute missing values in data >
+# Function to impute missing values based on type of variable (mode for factors, median for numeric)
+impute_data <- function(data, columns, method = "median") {
+  for (col in columns) {
+    if (method == "median") {
+      # Impute with median for numeric variables
+      data[[col]][is.na(data[[col]])] <- median(data[[col]], na.rm = TRUE)
+    } else if (method == "mode") {
+      # Impute with mode for categorical variables
+      mode_val <- names(sort(table(data[[col]]), decreasing = TRUE))[1]
+      data[[col]][is.na(data[[col]])] <- mode_val
+    }
+  }
+  return(data)
+}
+```
+
+
+```{r}
+# Impute training and testing data
+columns_to_impute_numeric <- c("Jobs_Per_Year", "Supervision_Risk_Score_First", "Avg_Days_per_DrugTest", "Percent_Days_Employed")
+columns_to_impute_factor <- c("Gang_Affiliated", "Supervision_Level_First", "Prison_Offense", "Program_UnexcusedAbsences")
+
+# Imputing numeric variables (using median) and categorical variables (using mode)
+training_Data <- impute_data(training_Data, columns_to_impute_numeric, method = "median")
+training_Data <- impute_data(training_Data, columns_to_impute_factor, method = "mode")
+
+testing_Data <- impute_data(testing_Data, columns_to_impute_numeric, method = "median")
+testing_Data <- impute_data(testing_Data, columns_to_impute_factor, method = "mode")
+
+```
+
+```{r}
+# Imputing drug-related columns with 0 for missing values, and create a drug_imputed indicator
+drug_cols <- c("DrugTests_THC_Positive", "DrugTests_Cocaine_Positive", "DrugTests_Meth_Positive", "DrugTests_Other_Positive")
+
+# Creating a drug_imputed indicator variable (True if any drug test is missing)
+training_Data$drug_imputed <- apply(training_Data[drug_cols], 1, function(x) any(is.na(x)))
+testing_Data$drug_imputed <- apply(testing_Data[drug_cols], 1, function(x) any(is.na(x)))
+
+# Imputing drug columns with 0 where data is missing
+training_Data[drug_cols] <- lapply(training_Data[drug_cols], function(x) ifelse(is.na(x), 0, x))
+testing_Data[drug_cols] <- lapply(testing_Data[drug_cols], function(x) ifelse(is.na(x), 0, x))
+
+```
+
+```{r}
+
+# Convert 'drug_imputed' to a factor
+training_Data$drug_imputed <- as.factor(training_Data$drug_imputed)
+testing_Data$drug_imputed <- as.factor(testing_Data$drug_imputed)
+
+```
+
+```{r}
+colnames(training_Data)[colSums(is.na(training_Data)) > 0]
+```
+
+8. Creating A simple benchmark
+
+```{r}
+# For training data
+training_Data <- training_Data %>% mutate(
+  Supervision_Risk_Score_First=case_when(
+    Supervision_Risk_Score_First>= 1 &  Supervision_Risk_Score_First <= 3 ~ "Low",
+    Supervision_Risk_Score_First>= 4 &  Supervision_Risk_Score_First <= 6 ~ "Medium",
+    Supervision_Risk_Score_First>= 7 ~ "High"
+  )
+) %>%
+  mutate(
+    Supervision_Risk_Score_First= as.factor(Supervision_Risk_Score_First)
+         )
+
+# For testing data
+testing_Data <- testing_Data %>% mutate(
+  Supervision_Risk_Score_First=case_when(
+    Supervision_Risk_Score_First>= 1 &  Supervision_Risk_Score_First <= 3 ~ "Low",
+    Supervision_Risk_Score_First>= 4 &  Supervision_Risk_Score_First <= 6 ~ "Medium",
+    Supervision_Risk_Score_First>= 7 ~ "High"
+  )
+)%>%
+  mutate(
+    Supervision_Risk_Score_First= as.factor(Supervision_Risk_Score_First)
+         )
+
+```
+
+```{r}
+table(training_Data$Supervision_Risk_Score_First)
+```
+
+```{r}
+table(testing_Data$Supervision_Risk_Score_First)
+
+```
+
+```{r}
+# Calculate crime table
+crimeTable <- table(training_Data$Supervision_Risk_Score_First, 
+                    training_Data$Recidivism_Within_3years)
+
+# Compute recidivism rate
+recidivismRate <- prop.table(crimeTable, margin = 1)[, "true"] * 100
+print(recidivismRate)
+
+```
+
+```{r}
+confMatrix<-table(
+  testing_Data$Supervision_Risk_Score_First=="High",
+  testing_Data$Recidivism_Within_3years
+)
+confMatrix
+```
+cross table ( confusion matrix) of predicted test labels vs true test labels and compute precision, recall and F1 score 
+```{r}
+calculate_metrics <- function(conf_matrix, target_row, target_col) {
+  # Extract values
+  TruePositive <- conf_matrix[target_row, target_col]       
+  FalsePositive <- sum(conf_matrix[target_row, ]) - TruePositive         
+  FalseNegative <- sum(conf_matrix[, target_col]) - TruePositive        
+  
+  # Compute metrics
+  precision <- TruePositive / (TruePositive + FalsePositive)
+  recall <- TruePositive / (TruePositive + FalseNegative)
+  f1_score <- 2 * (precision * recall) / (precision + recall)
+  
+  return(list(precision = precision, recall = recall, f1_score = f1_score))
+}
+
+```
+
+```{r}
+# Metrics for "High" Supervision Risk
+metrics_high <- calculate_metrics(
+  conf_matrix = crimeTable,
+  target_row = "High",
+  target_col = "true"
+)
+
+# Display results
+cat("Precision (High):", metrics_high$precision, "\n")
+cat("Recall (High):", metrics_high$recall, "\n")
+cat("F1 Score (High):", metrics_high$f1_score, "\n")
+
+```
+
+10.  Lasso Logistic Regression model
+
+```{r}
+# Define the training control
+set.seed(1)
+library(glmnet)
+library(caret)
+
+train_control <- trainControl(method = "cv", number = 5)
+
+lasso_model<-train(Recidivism_Within_3years~.,data = training_Data,
+             method="glmnet",tuneLength = 5,
+             trControl=train_control,
+             turnGrid=expand.grid(alpha=1,lambda = seq(0.01, 0.2, length = 10))
+             )
+```
+
+```{r}
+
+# Make predictions on the test dataset
+lasso_predictions <- predict(lasso_model, testing_Data)
+
+```
+
+```{r}
+summary(lasso_predictions)
+```
+
+```{r}
+library(gmodels)
+CrossTable(
+  testing_Data$Recidivism_Within_3years, 
+  lasso_predictions, 
+  prop.chisq = FALSE, 
+  prop.r = FALSE, 
+  prop.c = FALSE, 
+  dnn = c("Actual", "Predicted")
+)
+
+```
+
+```{r}
+confusionMatrix(lasso_predictions,testing_Data$Recidivism_Within_3years)
+```
+
+```{r}
+lassoLambda <- lasso_model$bestTune$lambda
+```
+
+```{r}
+lassoPredector <- setdiff(names(Dataset_NIJ), "Recidivism_Within_3years")
+
+```
+
+```{r}
+lassoPredector <- setdiff(names(training_Data), "Recidivism_Within_3years")
+# Fit the Lasso model with the cleaned and verified data
+lassoFinalModel <- glmnet(
+  as.matrix(training_Data[, lassoPredector]), 
+  as.factor(training_Data[, "Recidivism_Within_3years"]), 
+  alpha = 1, 
+  lambda = lassoLambda, 
+  family = "binomial"
+)
+
+# Print the final model to check
+print(lassoFinalModel)
+
+```
+
+```{r}
+bestTuned_coeffs <- coef(lasso_model$finalModel, s = lasso_model$bestTune$lambda)
+bestTuned_coeffs
+
+
+```
+Did Lasso shrink some of the coefficients to zero?
+Yes it shrink to zero, lasso is designed to remove coefficients that are not contributing to the model
+
+11. Ridge Regression
+
+```{r}
+# Ensure trainControl is defined
+set.seed(1)
+train_control <- trainControl(
+  method = "cv",        
+  number = 5            
+)
+
+# Train the Ridge Regression model
+ridge_model <- train(
+  Recidivism_Within_3years ~ .,     
+  data = training_Data,             
+  method = "glmnet",                 
+  trControl = train_control,         
+  tuneGrid = expand.grid(
+    alpha = 0,                       
+    lambda = seq(0.0001, 1, length = 100) 
+  ),
+  na.action = na.pass                
+)
+
+```
+
+```{r}
+# Print the Ridge model summary
+print(ridge_model)
+
+```
+
+```{r}
+ridge_predictions <- predict(ridge_model, newdata = testing_Data)
+summary(ridge_predictions)
+
+```
+
+```{r}
+library(gmodels)
+CrossTable(
+  testing_Data$Recidivism_Within_3years, 
+  ridge_predictions, 
+  prop.chisq = FALSE, 
+  prop.r = FALSE, 
+  prop.c = FALSE, 
+  dnn = c("Actual", "Predicted")
+)
+```
+
+```{r}
+confusionMatrix(ridge_predictions,testing_Data$Recidivism_Within_3years)
+
+```
+
+```{r}
+ridgeLambda <- ridge_model$bestTune$lambda
+```
+
+```{r}
+ridgePredector <- setdiff(names(Dataset_NIJ), "Recidivism_Within_3years")
+```
+
+```{r}
+ridgePredector <- setdiff(names(training_Data), "Recidivism_Within_3years")
+# Fit the Lasso model with the cleaned and verified data
+ridgeFinalModel <- glmnet(
+  as.matrix(training_Data[, ridgePredector]), 
+  as.factor(training_Data[, "Recidivism_Within_3years"]), 
+  alpha = 1, 
+  lambda = ridgeLambda, 
+  family = "binomial"
+)
+```
+
+```{r}
+# Print the final model to check
+print(ridgeFinalModel)
+
+```
+
+12. Elastic net logistic regression model
+
+```{r}
+set.seed(1)
+elasticNet_reg_model <- caret::train(
+   Recidivism_Within_3years~ .,
+  data = training_Data,
+  method = "glmnet",
+  trControl = train_control,
+  tuneLength = 5, 
+  tuneGrid = expand.grid(alpha= seq(0,1,length = 10),
+                         lambda = seq(0.0001, 0.2, length = 100)),
+  na.action = na.pass,
+  preProcess = c("knnImpute", "nzv")
+)
+
+# Print the summary of Elastic Net Model
+elasticNet_reg_model
+```
+
+```{r}
+elastic_predictions <- predict(elasticNet_reg_model, newdata = testing_Data)
+summary(elastic_predictions)
+```
+
+```{r}
+library(gmodels)
+CrossTable(
+  testing_Data$Recidivism_Within_3years, 
+  elastic_predictions, 
+  prop.chisq = FALSE, 
+  prop.r = FALSE, 
+  prop.c = FALSE, 
+  dnn = c("Actual", "Predicted")
+)
+```
+
+```{r}
+confusionMatrix(elastic_predictions,testing_Data$Recidivism_Within_3years)
+
+```
+
+```{r}
+elasticLambda <- elasticNet_reg_model$bestTune$lambda
+
+```
+
+```{r}
+elasticPredector <- setdiff(names(training_Data), "Recidivism_Within_3years")
+# Fit the Lasso model with the cleaned and verified data
+elasticFinalModel <- glmnet(
+  as.matrix(training_Data[, elasticPredector]), 
+  as.factor(training_Data[, "Recidivism_Within_3years"]), 
+  alpha = 1, 
+  lambda = elasticLambda, 
+  family = "binomial"
+)
+```
+
+```{r}
+# Print the final model to check
+print(elasticFinalModel)
+```
+
+13. Random forest model
+
+```{r}
+set.seed(1)
+
+# Train random forest model using caret
+randomForest_model <- train(
+  Recidivism_Within_3years ~ .,             
+  data = training_Data,                     
+  method = "rf",
+  importance = T,
+  trControl = trainControl(
+    method = "cv",                          
+    number = 5                               
+  )
+)
+
+# Print the trained model
+print(randomForest_model)                
+```
+
+```{r}
+
+predictions = predict(randomForest_model,testing_Data)
+table(predictions,testing_Data$Recidivism_Within_3years)
+```
+
+```{r}
+varImp(randomForest_model)
+
+```
+
+14. Gradient Boosting Model
+
+```{r}
+set.seed(1)
+gradientBooting_model <- caret::train(
+  Recidivism_Within_3years ~ .,
+  data = training_Data,
+  method = "gbm",
+  tuneLength = 5,
+  trControl = train_control,
+  na.action = na.pass,
+ 
+)
+```
+
+```{r}
+Gradient_predictions <- predict(gradientBooting_model,testing_Data)
+
+```
+
+```{r}
+summary(Gradient_predictions)
+```
+
+```{r}
+library(gmodels)
+CrossTable(
+  testing_Data$Recidivism_Within_3years, 
+  Gradient_predictions, 
+  prop.chisq = FALSE, 
+  prop.r = FALSE, 
+  prop.c = FALSE, 
+  dnn = c("Actual", "Predicted")
+)
+
+```
+
+```{r}
+confusionMatrix(Gradient_predictions,testing_Data$Recidivism_Within_3years)
+```
+
+15. Support Vector Machine (linear)
+
+```{r}
+svm_linear_model <- caret::train(
+  Recidivism_Within_3years ~ .,
+  data = training_Data,
+  na.action = na.pass,
+  preProcess = c("center", "scale"), 
+  method = "svmLinear",
+  trControl =  train_control,
+  tuneLength = 5
+  
+)
+
+#Print the summary of linear SVM model
+svm_linear_model
+
+```
+
+```{r}
+svm_linear_predictions <- predict(svm_linear_model,testing_Data)
+
+```
+
+```{r}
+summary(svm_linear_predictions)
+```
+
+```{r}
+library(gmodels)
+CrossTable(
+  testing_Data$Recidivism_Within_3years, 
+  svm_linear_predictions, 
+  prop.chisq = FALSE, 
+  prop.r = FALSE, 
+  prop.c = FALSE, 
+  dnn = c("Actual", "Predicted")
+)
+
+```
+
+```{r}
+confusionMatrix(svm_linear_predictions,testing_Data$Recidivism_Within_3years)
+```
+
+  Support Vector Machine (Radial)
+
+```{r}
+svm_radial_model <- caret::train(
+  Recidivism_Within_3years ~ .,
+  data = training_Data,
+  na.action = na.pass,
+  preProcess = c("center", "scale"), 
+  method = "svmRadial",
+  trControl =  train_control,
+  tuneLength = 5
+  
+)
+
+#Print the summary of Radial SVM model
+svm_radial_model
+```
+
+```{r}
+svm_radial_predictions <- predict(svm_radial_model,testing_Data)
+
+```
+
+```{r}
+summary(svm_radial_predictions)
+```
+
+```{r}
+confusionMatrix(svm_radial_predictions,testing_Data$Recidivism_Within_3years)
+
+```
+
+
+```{r}
+library(gmodels)
+CrossTable(
+  testing_Data$Recidivism_Within_3years, 
+  svm_radial_predictions, 
+  prop.chisq = FALSE, 
+  prop.r = FALSE, 
+  prop.c = FALSE, 
+  dnn = c("Actual", "Predicted")
+)
+
+```
+
+explain what is hyper-parameter “c”
+-> hyper-parameter “c” is a regularization parameter.1 indicates that the optimization process equally balances maximizing the margin between classes and minimizing the classification error on the training data.
+
+16. Use Resamples method to compare 
+```{r}
+models_summary <- resamples(list(
+  `Lasso Regression` = lasso_model, 
+  `Ridge Regression` = ridge_model, 
+  `Elastic Net Regression` = elasticNet_reg_model,  
+  `Gradient Boosting Regression` = gradientBooting_model, 
+  `SVM Linear Regression` = svm_linear_model, 
+  `SVM Radial Regression` = svm_radial_model,
+  `Random Forest` = randomForest_model
+  ))
+summary(models_summary)
+```
+Gradient Boosting Regression(gbm) have better cross validation performance and also have kappa and accuracy values high compared to other models
+
+Neural Network Model
+
+```{r}
+Dataset_NIJ$Recidivism_Within_3years <- ifelse(Dataset_NIJ$Recidivism_Within_3years == "true", 0, 1)
+```
+
+17.Split the training data to train –validation set. (use 90% for training and 10% for validation)
+```{r}
+# Split data into training and validation sets
+train_idx <- createDataPartition(training_Data$Recidivism_Within_3years, p = 0.9, list = FALSE)
+
+# Training set
+train_set <- training_Data[train_idx, -49]
+valid_set <- training_Data[-train_idx,-49]
+test_set <- testing_Data[, -49]
+
+```
+
+18. One-hot encode your categorical variables and scale your numeric variables.
+```{r}
+numericCols<-c("Dependents","Prior_Arrest_Episodes_Felony", "Residence_PUMA","Prior_Arrest_Episodes_Misd","Prior_Arrest_Episodes_Violent","Prior_Arrest_Episodes_Property","Prior_Arrest_Episodes_Drug","Prior_Arrest_Episodes_PPViolationCharges","Prior_Conviction_Episodes_Felony","Prior_Conviction_Episodes_Misd","Prior_Conviction_Episodes_Prop","Prior_Conviction_Episodes_Drug","Delinquency_Reports","Program_Attendances","Residence_Changes","Avg_Days_per_DrugTest","DrugTests_THC_Positive","DrugTests_Cocaine_Positive","DrugTests_Meth_Positive","DrugTests_Other_Positive","Percent_Days_Employed","Jobs_Per_Year")
+
+train_set[numericCols] <- scale(train_set[ numericCols])
+valid_set[numericCols] <- scale(valid_set[numericCols])
+test_set[numericCols] <- scale(test_set[numericCols])
+```
+
+```{r}
+length(numericCols)
+
+```
+
+```{r}
+train_set_en=as.matrix(one_hot(as.data.table(train_set)))
+valid_set_en=as.matrix(one_hot(as.data.table(valid_set)))
+test_set_en=as.matrix(one_hot(as.data.table(test_set)))
+
+train_set_en <- apply(train_set_en, 2, as.numeric)
+valid_set_en <- apply(valid_set_en, 2, as.numeric)
+test_set_en <- apply(test_set_en, 2, as.numeric)
+```
+
+```{r}
+train_set_labels <- training_Data[train_idx, 49]
+train_set_labels <- as.numeric(train_set_labels) - 1
+
+valid_set_labels <- training_Data[-train_idx, 49]  
+valid_set_labels <- as.numeric(valid_set_labels) - 1
+
+test_set_labels <- testing_Data$Recidivism_Within_3years  
+test_set_labels <- as.numeric(test_set_labels) - 1
+```
+
+19. Create a Neural Network model
+```{r}
+library(tfruns)
+library(tensorflow)
+# Hyperparameter Tuning using the 'tfruns' package
+model_NN <- tuning_run("Recidivism_flag.R", 
+                   flags = list(
+                     learning_rate = c(0.0001, 0.001),
+                     units1 = c( 32, 64, 128),
+                     units2 = c( 64, 128, 256),
+                     batch_size = c(16, 32),
+                     dropout1 = c(0.1, 0.2, 0.3),
+                     dropout2 = c(0.1, 0.2, 0.3),
+                     epochs = c(30, 50),
+                     activation1 = c("tanh", "relu", "sigmoid"),
+                     activation2 = c("tanh", "relu", "sigmoid")
+                   ),
+                   sample= 0.0002)
+
+```
+
+20. Best run
+```{r}
+model_NN_df<- as.data.frame(model_NN)
+
+sorted_accuracy_results <- model_NN_df[order(model_NN_df$metric_val_loss), ]
+best_epoch <- sorted_accuracy_results[1,]
+view_run(best_epoch)
+```
+Does your best model still overfit?
+-> No
+
+21. Use all of your training data to train a model with the best combination 
+```{r}
+train_x <- rbind(train_set_en,valid_set_en)
+train_y <- c(train_set_labels,valid_set_labels)
+```
+
+```{r}
+# Creating a sequential neural network model with two hidden layers
+ann_model <- keras_model_sequential() %>%
+  # first layer with activation function relu
+  layer_dense(units = best_epoch$flag_units1, activation = best_epoch$flag_activation1, input_shape = c(dim(train_x)[2])) %>%
+  layer_dropout(rate = 0.2) %>%
+  # second layer
+  layer_dense(units = best_epoch$flag_units2, activation = best_epoch$flag_activation2) %>%
+  layer_dropout(rate = 0.2) %>%
+  #output layer
+  layer_dense(units = 1)
+```
+
+```{r}
+ann_model %>% compile(
+  optimizer = optimizer_adam(learning_rate = best_epoch$flag_learning_rate),
+  loss = 'binary_crossentropy',
+  metrics = 'accuracy'
+)
+
+callbacks <- list(
+  callback_early_stopping(monitor = "val_loss", patience = 5, restore_best_weights = TRUE)
+)
+```
+
+```{r}
+training_history <- ann_model %>% fit(
+  train_set_en, train_set_labels,
+  validation_data = list(valid_set_en, valid_set_labels),
+  batch_size = best_epoch$batch_size,
+  epochs = best_epoch$flag_epochs,
+  callbacks = callbacks,
+  verbose = 1  
+)
+```
+
+```{r}
+# Creating a data frame to store the loss and validation loss
+epoch_loss_data <- data.frame(
+  epoch = 1:length(training_history$metrics$loss),
+  loss = training_history$metrics$loss,
+  val_loss = training_history$metrics$val_loss
+)
+```
+
+Learning Curve
+```{r}
+# Plot the learning curve 
+ggplot(epoch_loss_data, aes(x = epoch)) +
+  geom_line(aes(y = loss, color = "Training Loss"), size = 1) +
+  geom_line(aes(y = val_loss, color = "Validation Loss"), size = 1) +
+  labs(title = "Training vs. Validation Loss", 
+       x = "Epoch", 
+       y = "Loss") +
+  scale_color_manual(values = c("Training Loss" = "blue", "Validation Loss" = "red")) +
+  theme_minimal()
+```
+
+```{r}
+# Evaluating the performance of the trained model 
+ann_model %>% evaluate(test_set_en,test_set_labels)
+Final_predictions = ann_model%>%predict (test_set_en)
+Final_predictions <- ifelse(Final_predictions <= 0.5,1,0)
+```
+
+Comparing confusion matrix 
+```{r}
+# Creating a confusion matrix comparing predicted labels with actual labels
+confusion_matrix_nn <- table(Predicted = Final_predictions, Actual = test_set_labels)
+print (confusion_matrix_nn)
+Precision_nn <- confusion_matrix_nn [2,2]/sum(confusion_matrix_nn[,2])
+Recall_nn <- confusion_matrix_nn [2,2]/sum(confusion_matrix_nn[2,])
+F1_Score_nn <- 2*(Recall_nn * Recall_nn) /(Recall_nn+Recall_nn)
+print (paste("Precision: ", Recall_nn))
+print (paste("Recall:", Recall_nn))
+print (paste("F1 Score:", F1_Score_nn))
+```
+
+22. Compare your best model to the simple benchmark you created earlier
+```{r}
+models_summary <- resamples(list(
+  `Lasso Regression` = lasso_model, 
+  `Ridge Regression` = ridge_model, 
+  `Elastic Net Regression` = elasticNet_reg_model,  
+  `Gradient Boosting Regression` = gradientBooting_model, 
+  `SVM Linear Regression` = svm_linear_model, 
+  `SVM Radial Regression` = svm_radial_model,
+  `Random Forest` = randomForest_model
+  ))
+summary(models_summary)
+```
+
+```{r}
+# out of all the models  grBostedTree has performed the best
+library(gmodels)
+CrossTable(
+  testing_Data$Recidivism_Within_3years, 
+  Gradient_predictions, 
+  prop.chisq = FALSE, 
+  prop.r = FALSE, 
+  prop.c = FALSE, 
+  dnn = c("Actual", "Predicted")
+)
+
+```
+
+```{r}
+confusionMatrix(Gradient_predictions,testing_Data$Recidivism_Within_3years)
+```
+
+```{r}
+
+
+TrueNegative <- 2036
+FalsePositive <- 1288
+FalseNegatie <- 737
+TruePositive <- 3746
+
+Precision <- TruePositive / (TruePositive + FalsePositive)
+Recall <- TruePositive / (TruePositive + FalseNegatie)
+F1_Score <- 2 * (Precision * Recall) / (Precision + Recall)
+
+
+cat("Precision: ", Precision, "\n")
+cat("Recall: ", Recall, "\n")
+cat("F1 Score: ", F1_Score, "\n")
+
+```
+
+
+23. Model Interpretation using Shapley Values 
+```{r}
+library(iml)
+recidivism_predictor<-Predictor$new(gradientBooting_model,data=testing_Data[1:100,], type = "prob")
+shapley<-Shapley$new(recidivism_predictor, testing_Data[1:100,])
+plot(shapley)
+```
+
+24. Fairness Metrics
+```{r}
+library(fairness)
+
+testing_Data$bPredictions<-predict(gradientBooting_model,testing_Data,type = "prob")$true
+
+dem_parity(data=testing_Data,
+           outcome = "Recidivism_Within_3years",
+           group = "Gender",
+           probs = "bPredictions",
+           base = "M"
+           )
+```
+
+```{r}
+dem_parity(data=testing_Data,
+           outcome = "Recidivism_Within_3years",
+           group = "Race",
+           probs = "bPredictions",
+           base = "BLACK"
+           )
+```
+
+```{r}
+equal_odds(data = testing_Data,
+           outcome = "Recidivism_Within_3years",
+           group = "Gender",
+           probs = "bPredictions"
+          )
+```
+
+```{r}
+equal_odds(data=testing_Data,
+           outcome = "Recidivism_Within_3years",
+           group = "Race",
+           probs = "bPredictions",
+           base = "BLACK"
+           )
+```
+
+```{r}
+equal_odds(data=testing_Data,
+           outcome = "Recidivism_Within_3years",
+           group = "Gender",
+           probs = "bPredictions",
+           base = "M"
+           )
+```
+
+```{r}
+equal_odds(data=testing_Data,
+           outcome = "Recidivism_Within_3years",
+           group = "Race",
+           probs = "bPredictions",
+           base = "BLACK"
+           )
+```
+    .
