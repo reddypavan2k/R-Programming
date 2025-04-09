@@ -1,0 +1,559 @@
+```{r}
+library(glmnet)
+library(mltools)
+library(data.table)
+library(randomForest)
+library(tfruns)
+library(tidyr)
+library(scales)
+library(psych)
+library(dplyr)
+library(caret)
+library(ggplot2)
+```
+
+```{r}
+Dataset <- read.csv("~/Downloads/bank-full.csv", sep = ";", na.strings = "")
+
+```
+
+```{r}
+str(Dataset)
+summary(Dataset)
+```
+```{r}
+colSums(is.na(Dataset))
+```
+```{r}
+as.data.frame(colSums(is.na(Dataset))) %>% rename_at('colSums(is.na(Dataset))', ~'Missing_Values')
+
+```
+
+
+```{r}
+# Extract variable names from the dataset
+variable_names <- colnames(Dataset)
+
+# Define variable types
+variable_types <- data.frame(
+  Variable = variable_names,
+  Type = c("Numeric (Continuous)", "Categorical (Unordered)", 
+           "Categorical (Unordered)", "Categorical (Ordered)", 
+           "Categorical (Unordered)", "Numeric (Continuous)", 
+           "Categorical (Unordered)", "Categorical (Unordered)", 
+           "Categorical (Unordered)", "Numeric (Continuous)", 
+           "Categorical (Unordered)", "Numeric (Continuous)", 
+           "Numeric (Continuous)", "Numeric (Continuous)", 
+           "Numeric (Continuous)", "Categorical (Unordered)", 
+           "Categorical (Unordered)")
+)
+
+# Print the result
+print(variable_types)
+
+```
+
+```{r}
+# Identify categorical variables
+categorical_vars <- names(Dataset)[sapply(Dataset, is.character)]
+
+# Print the result
+categorical_vars
+
+```
+
+```{r}
+Dataset <- Dataset %>%
+  mutate(across(
+    c(
+      "job", "marital", "education", "default", "housing", "loan", "contact", "month", "poutcome", "y"
+    ), 
+    as.factor
+  ))
+str(Dataset)
+```
+```{r}
+table_job <- table(Dataset$job, Dataset$y)
+table_job
+mosaicplot(table_job, ylab= "y", xlab="job", main = "job vs y", shade=TRUE)
+
+chisq.test(table(Dataset$job, Dataset$y))
+
+table_marital <- table(Dataset$marital, Dataset$y)
+table_marital
+mosaicplot(table_marital, ylab= "y", xlab="marital", main = "marital vs y", shade=TRUE)
+
+chisq.test(table(Dataset$marital, Dataset$y))
+
+table_education <- table(Dataset$education, Dataset$y)
+table_education
+mosaicplot(table_education, ylab= "y", xlab="education", main = "education vs y", shade=TRUE)
+
+chisq.test(table(Dataset$education, Dataset$y))
+
+table_default <- table(Dataset$default, Dataset$y)
+table_default
+mosaicplot(table_default, ylab= "y", xlab="default", main = "default vs y", shade=TRUE)
+
+chisq.test(table(Dataset$default, Dataset$y))
+
+table_housing <- table(Dataset$housing, Dataset$y)
+table_housing
+mosaicplot(table_housing, ylab= "y", xlab="housing", main = "housing vs y", shade=TRUE)
+
+chisq.test(table(Dataset$housing, Dataset$y))
+
+table_loan <- table(Dataset$loan, Dataset$y)
+table_loan
+mosaicplot(table_loan, ylab= "y", xlab="loan", main = "loan vs y", shade=TRUE)
+
+chisq.test(table(Dataset$loan, Dataset$y))
+
+table_contact <- table(Dataset$contact, Dataset$y)
+table_contact
+mosaicplot(table_contact, ylab= "y", xlab="contact", main = "contact vs y", shade=TRUE)
+
+chisq.test(table(Dataset$contact, Dataset$y))
+
+table_month <- table(Dataset$month, Dataset$y)
+table_month
+mosaicplot(table_month, ylab= "y", xlab="month", main = "month vs y", shade=TRUE)
+
+chisq.test(table(Dataset$month, Dataset$y))
+
+table_poutcome <- table(Dataset$poutcome, Dataset$y)
+table_poutcome
+mosaicplot(table_month, ylab= "y", xlab="poutcome", main = "poutcome vs y", shade=TRUE)
+
+chisq.test(table(Dataset$poutcome, Dataset$y))
+```
+test for 
+```{r}
+relationship_age = ggplot(Dataset, aes(x = age, y = y)) + geom_boxplot() 
+relationship_age
+# t-test between age and y
+Test_age = t.test(age~y,alternative="two.sided", data=Dataset)
+Test_age
+
+# balance
+# Boxplot for 'balance' vs 'y'
+relationship_balance = ggplot(Dataset, aes(x = balance, y = y)) + geom_boxplot() 
+relationship_balance
+# t-test between balance and y
+Test_balance = t.test(balance~y,alternative="two.sided", data=Dataset)
+Test_balance
+
+# day
+# Boxplot for 'day' vs 'y'
+relationship_day = ggplot(Dataset, aes(x = day, y = y)) + geom_boxplot() 
+relationship_day
+# t-test between day and y
+Test_day = t.test(day~y,alternative="two.sided", data=Dataset)
+Test_day
+
+# duration
+# Boxplot for 'duration' vs 'y'
+relationship_duration = ggplot(Dataset, aes(x = duration, y = y)) + geom_boxplot() 
+relationship_duration
+# t-test between duration and y
+Test_duration = t.test(duration~y,alternative="two.sided", data=Dataset)
+Test_duration
+
+# campaign
+# Boxplot for 'campaign' vs 'y'
+relationship_campaign = ggplot(Dataset, aes(x = campaign, y = y)) + geom_boxplot() 
+relationship_campaign
+# t-test between campaign and y
+Test_campaign = t.test(campaign~y,alternative="two.sided", data=Dataset)
+Test_campaign
+
+# pdays
+# Boxplot for 'pdays' vs 'y'
+relationship_pdays = ggplot(Dataset, aes(x = pdays, y = y)) + geom_boxplot() 
+relationship_pdays
+# t-test between pdays and y
+Test_cpdays = t.test(pdays~y,alternative="two.sided", data=Dataset)
+Test_cpdays
+
+# previous
+# Boxplot for 'previous' vs 'y'
+relationship_previous = ggplot(Dataset, aes(x = previous, y = y)) + geom_boxplot() 
+relationship_previous
+# t-test between previous and y
+Test_previous = t.test(previous~y,alternative="two.sided", data=Dataset)
+Test_previous
+```
+```{r}
+# Assuming df is your data frame
+cat_columns <- c('job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'month', 'poutcome')
+
+# Set up the plotting area (3 rows, 3 columns)
+par(mfrow = c(3, 3), mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 2, 0))
+
+# Loop through each categorical column and plot
+for (cat_column in cat_columns) {
+  # Get value counts
+  value_counts <- table(Dataset[[cat_column]])
+  
+  # Create a bar plot
+  barplot(value_counts, 
+          main = cat_column, 
+          las = 2,       # Rotate x-axis labels
+          col = "skyblue",
+          border = "white")
+}
+
+# Reset layout
+par(mfrow = c(1, 1))
+
+```
+```{r}
+# Assuming df is your data frame
+num_columns <- c('balance', 'day', 'duration', 'campaign', 'pdays', 'previous')
+
+# Set up the plotting area (2 rows, 3 columns)
+par(mfrow = c(2, 3), mar = c(4, 4, 2, 1))
+
+# Loop through each numerical column and plot
+for (num_column in num_columns) {
+  # Create a histogram for the column
+  hist(Dataset[[num_column]], 
+       main = num_column,          # Title of the plot
+       xlab = num_column,          # X-axis label
+       col = "skyblue",            # Fill color
+       border = "white")           # Border color
+}
+
+# Reset layout to default
+par(mfrow = c(1, 1))
+
+```
+
+```{r}
+Dataset$y <- ifelse(Dataset$y == "yes", 1, 0)
+```
+
+
+```{r}
+Dataset <- as.data.frame(Dataset)
+split <- round(nrow(Dataset) * 0.8)
+training_Data <- Dataset[1:split, ]
+testing_Data <- Dataset[(split + 1):nrow(Dataset), ]
+
+```
+
+```{r}
+sum(is.na(training_Data))
+```
+
+```{r}
+# Perform preprocessing on numerical columns
+numerical_vars <- c("age", "balance", "day", "duration", "campaign", "pdays", "previous")
+preproc <- preProcess(Dataset[, numerical_vars], method = c("center", "scale"))
+# Apply preprocessing to the dataset
+Dataset[, numerical_vars] <- predict(preproc, Dataset[, numerical_vars])
+Dataset
+```
+
+1. Linear Regression
+```{r}
+train_control <- trainControl(method = "cv", number = 5)
+ linear_model <- train(
+  y ~ ., 
+  data = training_Data,
+  method = "glmnet",
+  trControl = train_control,
+  tuneGrid = expand.grid(
+    alpha = c(0, 1),  # 0 = Ridge, 1 = Lasso
+    lambda = seq(0.001, 0.1, length = 10) # Regularization strength
+  )
+)
+```
+
+```{r}
+print(linear_model) 
+
+```
+
+```{r}
+testPredictions_linear <- predict(linear_model, newdata = testing_Data, na.action = na.pass)
+RMSE_linear <- sqrt(mean((testing_Data$y - testPredictions_linear)^2))
+# View the RMSE
+RMSE_linear
+```
+
+```{r}
+coef(linear_model$finalModel, linear_model$bestTune$lambda)
+```
+
+lasso
+```{r}
+
+# Define the training control
+lasso_model <- train(
+  y ~ .,
+  data = training_Data,
+  method = "glmnet",
+  tuneLength = 5,
+  trControl = train_control,
+  tuneGrid = expand.grid(alpha = 1, lambda = seq(0.01, 0.2, length = 10))
+)
+
+```
+
+```{r}
+print(lasso_model)
+```
+
+```{r}
+testPredictions_lasso <- predict(lasso_model, newdata = testing_Data, na.action = na.pass)
+RMSE_lasso <- sqrt(mean((testing_Data$y - testPredictions_lasso)^2))
+# View the RMSE
+RMSE_lasso
+```
+
+```{r}
+coef(lasso_model$finalModel, lasso_model$bestTune$lambda)
+```
+
+
+Ridge
+```{r}
+set.seed(1)
+train_control <- trainControl(
+  method = "cv",        
+  number = 5            
+)
+
+# Train the Ridge Regression model
+ridge_model <- train(
+  y ~ .,     
+  data = training_Data,             
+  method = "glmnet",                 
+  trControl = train_control,         
+  tuneGrid = expand.grid(
+    alpha = 0,                       
+    lambda = seq(0.0001, 1, length = 100) 
+  ),
+  na.action = na.pass                
+)
+
+```
+
+```{r}
+print(ridge_model) 
+
+```
+
+```{r}
+testPredictions_ridge <- predict(ridge_model, newdata = testing_Data, na.action = na.pass)
+RMSE_ridge <- sqrt(mean((testing_Data$y - testPredictions_ridge)^2))
+# View the RMSE
+RMSE_ridge
+```
+
+```{r}
+coef(ridge_model$finalModel, ridge_model$bestTune$lambda)
+
+```
+
+ Elastic net logistic regression model
+
+```{r}
+set.seed(1)
+elasticNet_reg_model <- caret::train(
+   y~ .,
+  data = training_Data,
+  method = "glmnet",
+  trControl = train_control,
+  tuneLength = 5, 
+  tuneGrid = expand.grid(alpha= seq(0,1,length = 10),
+                         lambda = seq(0.0001, 0.2, length = 100)),
+  na.action = na.pass,
+  preProcess = c("knnImpute", "nzv")
+)
+```
+
+```{r}
+print(elasticNet_reg_model) 
+
+```
+
+```{r}
+testPredictions_elastic <- predict(elasticNet_reg_model, newdata = testing_Data, na.action = na.pass)
+RMSE_elastic <- sqrt(mean((testing_Data$y - testPredictions_elastic)^2))
+# View the RMSE
+RMSE_elastic
+```
+
+```{r}
+coef(elasticNet_reg_model$finalModel, elasticNet_reg_model$bestTune$lambda)
+
+```
+
+Decision Tree
+```{r}
+# Decision Tree with Criterion and Max Depth
+dt_model <- train(
+  y ~ ., 
+  data = training_Data,
+  method = "rpart",
+  trControl = trainControl(method = "cv", number = 5),
+  tuneGrid = expand.grid(
+    cp = seq(0.01, 0.1, by = 0.01) # Complexity parameter
+  )
+)
+```
+
+```{r}
+print(dt_model) 
+
+```
+
+```{r}
+testPredictions_dt <- predict(dt_model, newdata = testing_Data, na.action = na.pass)
+RMSE_dt <- sqrt(mean((testing_Data$y - testPredictions_dt)^2))
+# View the RMSE
+RMSE_dt
+```
+
+ Gradient Boosted Trees
+```{r}
+# Gradient Boosting with Learning Rate and Max Depth
+gbm_model <- train(
+  y ~ ., 
+  data = training_Data,
+  method = "gbm",
+  trControl = trainControl(method = "cv", number = 5),
+  tuneGrid = expand.grid(
+    n.trees = c(50, 100),        # Number of trees
+    interaction.depth = c(1, 3), # Max depth of trees
+    shrinkage = c(0.01, 0.1),    # Learning rate
+    n.minobsinnode = 10          # Min samples per leaf
+  )
+)
+```
+
+```{r}
+print(gbm_model) 
+```
+
+```{r}
+testPredictions_gbm <- predict(gbm_model, training_Data, na.action = na.pass)
+RMSE_gbm <- sqrt(mean((training_Data$y - testPredictions_gbm)^2))
+# View the RMSE
+RMSE_gbm
+```
+```{r}
+
+```
+
+KNN Model
+
+```{r}
+# KNN with N Neighbors and Weights
+knn_model <- train(
+  y ~ ., 
+  data = training_Data,
+  method = "knn",
+  trControl = trainControl(method = "cv", number = 5),
+  tuneGrid = expand.grid(
+    k = seq(3, 15, by = 2) # Number of neighbors
+  )
+)
+```
+
+```{r}
+print(knn_model) 
+```
+
+```{r}
+testPredictions_knn <- predict(knn_model, newdata = testing_Data, na.action = na.pass)
+RMSE_knn <- sqrt(mean((testing_Data$y - testPredictions_knn)^2))
+# View the RMSE
+RMSE_knn
+```
+
+K-Means 
+```{r}
+# Convert data to numeric by excluding non-numeric columns
+numeric_data <- training_Data[, sapply(training_Data, is.numeric)]
+
+# Perform K-means clustering
+set.seed(123)
+kmeans_model <- kmeans(
+  numeric_data,
+  centers = 3,   # Number of clusters
+  iter.max = 100 # Max iterations
+)
+
+```
+
+```{r}
+print(kmeans_model) 
+
+```
+
+```{r}
+testPredictions_kmeans <- predict(kmeans_model, newdata = testing_Data, na.action = na.pass)
+RMSE_kmeans <- sqrt(mean((testing_Data$y - testPredictions_kmeans)^2))
+# View the RMSE
+RMSE_kmeans
+```
+
+```{r}
+coef(kmeans_model$finalModel, kmeans_model$bestTune$lambda)
+```
+
+```{r}
+
+```
+
+Random Forest
+```{r}
+set.seed(1)
+
+# Train random forest model using caret
+randomForest_model <- train(
+  y ~ .,             
+  data = training_Data,                     
+  method = "rf",
+  trControl = trainControl(
+    method = "cv",                          
+    number = 5                               
+  )
+)
+```
+
+```{r}
+print(randomForest_model) 
+```
+
+```{r}
+testPredictions_randomforest <- predict(dt_model, newdata = testing_Data, na.action = na.pass)
+RMSE_randomforest <- sqrt(mean((testing_Data$y - testPredictions_randomforest)^2))
+# View the RMSE
+RMSE_randomforest
+```
+
+```{r}
+varImp(randomForest_model, scale = FALSE)
+```
+
+```{r}
+coef(randomForest_model$finalModel, randomForest_model$bestTune$lambda)
+
+```
+
+```{r}
+models_summary <- resamples(list(
+  `Linear Regression` = linear_model,
+  `Lasso Regression` = lasso_model, 
+  `Ridge Regression` = ridge_model, 
+  `Elastic Net Regression` = elasticNet_reg_model,  
+  `Gradient Boosting Regression` = gbm_model, 
+  `knn model` = knn_model
+  ))
+summary(models_summary)
+```
+
